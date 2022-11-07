@@ -125,10 +125,12 @@ log_fit <- fit(log_wflow, titanic_train)
 ```
 
 # q8
-```{r}
+```{r, include=FALSE}
 log_reg_predict <- predict(log_fit, new_data = titanic_train)
 predict <- bind_cols(titanic_train %>% select(survived), log_reg_predict)
 predict
+```
+```{r}
 log_reg_acc <- augment(log_fit, new_data = titanic_train) %>%
   accuracy(truth = survived, estimate = .pred_class)
 log_reg_acc
