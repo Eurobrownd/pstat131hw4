@@ -31,7 +31,7 @@ titanic_data$pclass <- as.factor(titanic_data$pclass)
 head(titanic_data)
 ```
 
-q1
+# q1
 ```{r}
 set.seed(115)
 titanic_split <- initial_split(titanic_data, prop = 0.8, strata = survived)
@@ -41,9 +41,96 @@ dim(titanic_train)
 dim(titanic_test)
 ```
 
-q2
+# q2
 ```{r}
 titanic_folds <- vfold_cv(data= titanic_train, v=10)
 titanic_folds
-
 ```
+
+# q3
+Using folds we are splitting the training data into 10 groups to prevent overfitting since
+each subset is another training set with its own validation set. To avoid overtuning our model
+to the testing set and overfitting. If the whole training set is used for resampling, that would be bootstrapping
+
+# q4
+```{r}
+titanic_recipe <- recipe(survived~pclass + sex + age + sib_sp + parch + fare,
+                         data= titanic_train) %>%  
+  step_impute_linear(age) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact(terms = ~ sex_male:fare) %>% 
+  step_interact( terms = ~ age:fare)
+
+titanic_recipe
+
+log_reg <- logistic_reg() %>%
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+log_wflow <- workflow() %>% 
+  add_model(log_reg) %>% 
+  add_recipe(titanic_recipe)
+
+lda_mod <- discrim_linear() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+lda_wflow <- workflow() %>% 
+  add_model(lda_mod) %>%
+  add_recipe(titanic_recipe)
+
+qda_mod <- discrim_quad() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+qda_wflow <- workflow() %>% 
+  add_model(qda_mod) %>%
+  add_recipe(titanic_recipe)
+```
+
+In total, we are fitting 30 models. Since there are 3 different models and 10 folds
+
+# q5
+```{r, message= FALSE, warning= FALSE}
+degree_grid <- grid_regular(degree(range = c(1,10)), levels= 10)
+
+tune_res_log <- tune_grid(object= log_wflow,
+                          resamples = titanic_folds,
+                          grid = degree_grid)
+
+tune_res_lda <- tune_grid(object= lda_wflow,
+                          resamples = titanic_folds,
+                          grid = degree_grid)
+
+tune_res_qda <- tune_grid(object = qda_wflow,
+                          resamples = titanic_folds,
+                          grid = degree_grid)
+```
+
+# q6
+```{r}
+collect_metrics(tune_res_log)
+
+collect_metrics(tune_res_lda)
+
+collect_metrics(tune_res_qda)
+```
+Comparing the accuracy and roc_auc of the different models logistic regression has the highest accuracy. And looking
+at the standard error of the different models, they are around the same between linear regression and the second best
+performing model lda. So I would choose to use the logistic regression model.
+
+# q7
+```{r}
+log_fit <- fit(log_wflow, titanic_train)
+```
+
+# q8
+```{r}
+log_reg_predict <- predict(log_fit, new_data = titanic_train)
+predict <- bind_cols(titanic_train %>% select(survived), log_reg_predict)
+predict
+log_reg_acc <- augment(log_fit, new_data = titanic_train) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+log_reg_acc
+```
+The logistic regression model performed slightly better on the test set than it did on the k-folds
